@@ -1,0 +1,8 @@
+language: java
+
+os: linux
+dist: bionic
+jdk: openjdk11
+
+script:
+  - ./gradlew clean build jmhJar
