@@ -5,6 +5,8 @@ import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 import java.util.AbstractMap
@@ -25,7 +27,7 @@ open class Maps {
     var numProducers = 0
     @Param("1", "8")
     var numMaps = 0
-    @Param("1", "32")
+    @Param("1", "16")
     var mapEntriesPerInsert = 0
 
     var mapIds = mutableSetOf<MapId>()
@@ -114,15 +116,16 @@ open class StateInActorsVsLocksBenchmark {
     }
 
     @Benchmark
-    fun stateBehindSingleLock(st: Maps, bh: Blackhole) {
+    fun stateBehindSingleSyncObject(st: Maps, bh: Blackhole) {
         runBlocking(Dispatchers.Default) {
             val state = mutableMapOf<MapId, MutableMap<String, Int>>()
             st.mapIds.forEach { mapId -> state[mapId] = mutableMapOf() }
-            val lock = Any()
+            val sync = Any()
             produce(st) { m ->
-                synchronized(lock) {
+                val map = state[m.mapId]!!
+                synchronized(sync) {
                     for (item in m.items) {
-                        state[m.mapId]!![item.key] = item.value
+                        map[item.key] = item.value
                     }
                 }
             }
@@ -131,15 +134,52 @@ open class StateInActorsVsLocksBenchmark {
     }
 
     @Benchmark
-    fun stateBehindMultipleLocks(st: Maps, bh: Blackhole) {
-        data class LockAndMap(val lock: Any, val map: MutableMap<String, Int>)
+    fun stateBehindMultipleSyncObjects(st: Maps, bh: Blackhole) {
+        data class SyncAndMap(val sync: Any, val map: MutableMap<String, Int>)
 
         runBlocking(Dispatchers.Default) {
-            val state = mutableMapOf<MapId, LockAndMap>()
-            st.mapIds.forEach { mapId -> state[mapId] = LockAndMap(Any(), mutableMapOf()) }
+            val state = mutableMapOf<MapId, SyncAndMap>()
+            st.mapIds.forEach { mapId -> state[mapId] = SyncAndMap(Any(), mutableMapOf()) }
             produce(st) { m ->
-                val (lock, map) = state[m.mapId]!!
-                synchronized(lock) {
+                val (sync, map) = state[m.mapId]!!
+                synchronized(sync) {
+                    for (item in m.items) {
+                        map[item.key] = item.value
+                    }
+                }
+            }
+            state.forEach { (_, map) -> bh.consume(map) }
+        }
+    }
+
+    @Benchmark
+    fun stateBehindSingleMutex(st: Maps, bh: Blackhole) {
+        runBlocking(Dispatchers.Default) {
+            val state = mutableMapOf<MapId, MutableMap<String, Int>>()
+            st.mapIds.forEach { mapId -> state[mapId] = mutableMapOf() }
+            val mutex = Mutex()
+            produce(st) { m ->
+                val map = state[m.mapId]!!
+                mutex.withLock {
+                    for (item in m.items) {
+                        map[item.key] = item.value
+                    }
+                }
+            }
+            bh.consume(state)
+        }
+    }
+
+    @Benchmark
+    fun stateBehindMultipleMutexes(st: Maps, bh: Blackhole) {
+        data class MutexAndMap(val mutex: Mutex, val map: MutableMap<String, Int>)
+
+        runBlocking(Dispatchers.Default) {
+            val state = mutableMapOf<MapId, MutexAndMap>()
+            st.mapIds.forEach { mapId -> state[mapId] = MutexAndMap(Mutex(), mutableMapOf()) }
+            produce(st) { m ->
+                val (mutex, map) = state[m.mapId]!!
+                mutex.withLock {
                     for (item in m.items) {
                         map[item.key] = item.value
                     }

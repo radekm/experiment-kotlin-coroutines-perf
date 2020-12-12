@@ -33,8 +33,9 @@ jmh {
     // Otherwise Shadow fails.
     duplicateClassesStrategy = DuplicatesStrategy.WARN
 
-    warmupIterations = 20
-    iterations = 20
+    warmupIterations = 15
+    iterations = 15
     fork = 3
     threads = 1
+    jvmArgsAppend = listOf("-Xmx6g")
 }
