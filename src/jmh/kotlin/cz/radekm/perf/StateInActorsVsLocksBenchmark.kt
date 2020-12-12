@@ -1,5 +1,6 @@
 package cz.radekm.perf
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.actor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -71,7 +72,7 @@ open class StateInActorsVsLocksBenchmark {
 
     @Benchmark
     fun stateInSingleActor(st: Maps, bh: Blackhole) {
-        runBlocking {
+        runBlocking(Dispatchers.Default) {
             val actorQueue = actor<InsertIntoMap> {
                 val state = mutableMapOf<MapId, MutableMap<String, Int>>()
                 st.mapIds.forEach { mapId -> state[mapId] = mutableMapOf() }
@@ -92,7 +93,7 @@ open class StateInActorsVsLocksBenchmark {
 
     @Benchmark
     fun stateInMultipleActors(st: Maps, bh: Blackhole) {
-        runBlocking {
+        runBlocking(Dispatchers.Default) {
             val actorQueues = st.mapIds.map { mapId ->
                 mapId to actor<InsertIntoMap> {
                     val map = mutableMapOf<String, Int>()
@@ -114,7 +115,7 @@ open class StateInActorsVsLocksBenchmark {
 
     @Benchmark
     fun stateBehindSingleLock(st: Maps, bh: Blackhole) {
-        runBlocking {
+        runBlocking(Dispatchers.Default) {
             val state = mutableMapOf<MapId, MutableMap<String, Int>>()
             st.mapIds.forEach { mapId -> state[mapId] = mutableMapOf() }
             val lock = Any()
@@ -133,7 +134,7 @@ open class StateInActorsVsLocksBenchmark {
     fun stateBehindMultipleLocks(st: Maps, bh: Blackhole) {
         data class LockAndMap(val lock: Any, val map: MutableMap<String, Int>)
 
-        runBlocking {
+        runBlocking(Dispatchers.Default) {
             val state = mutableMapOf<MapId, LockAndMap>()
             st.mapIds.forEach { mapId -> state[mapId] = LockAndMap(Any(), mutableMapOf()) }
             produce(st) { m ->

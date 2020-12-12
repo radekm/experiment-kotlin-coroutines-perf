@@ -1,6 +1,7 @@
 package cz.radekm.perf
 
 import io.reactivex.rxjava3.core.Observable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -63,7 +64,7 @@ open class FlowVsSeqBenchmark {
 
     @Benchmark
     fun flowOf(st: Sentences, bh: Blackhole) {
-        runBlocking {
+        runBlocking(Dispatchers.IO) {
             flowOf(*st.sentences)
                 .flatMapConcat { sentence -> sentence.asFlow() }
                 .filter { word -> word !in st.verbs }
@@ -74,7 +75,7 @@ open class FlowVsSeqBenchmark {
     @Benchmark
     fun consumeAsFlow(st: Sentences, bh: Blackhole) {
         val capacity = 2048
-        runBlocking {
+        runBlocking(Dispatchers.IO) {
             val channel = Channel<Sentence>(capacity)
             launch {
                 st.sentences.forEach { channel.send(it) }
